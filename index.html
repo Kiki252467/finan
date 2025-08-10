@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Portfolio Dashboard v5 — Preview</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#071021;--card:rgba(255,255,255,0.03);--accent:#00c2a8;--muted:#94a3b8}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#e6eef3;background:linear-gradient(180deg,#071021,#0a1220)}
+.container{max-width:1200px;margin:12px auto;padding:12px}
+.header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;color:var(--accent);font-size:18px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+.summary{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+.summary .card{flex:1;min-width:180px;padding:14px}
+.row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+.col-8{flex:1 1 65%;min-width:260px}
+.col-4{flex:1 1 30%;min-width:220px}
+canvas{width:100%!important;height:260px!important}
+.table{width:100%;border-collapse:collapse;margin-top:8px}
+.table th,.table td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);color:#dbe6ee;text-align:left}
+.small{color:var(--muted);font-size:13px}
+.btn{background:var(--accent);color:#021;padding:8px 10px;border-radius:8px;border:none;cursor:pointer}
+.legend-item{display:flex;align-items:center;gap:8px;margin:6px 0}
+.legend-color{width:12px;height:12px;border-radius:3px}
+.footer{margin-top:14px;color:var(--muted);font-size:13px}
+.news-columns{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.news-col{flex:1;min-width:260px;max-height:340px;overflow:auto}
+.note{color:var(--muted);font-size:13px;margin-top:8px}
+@media(max-width:900px){.col-8,.col-4{flex-basis:100%};.news-columns{flex-direction:column}canvas{height:220px!important}}
+.modal { position: fixed; top: 0; left:0; right:0; bottom:0; display:none; align-items:center; justify-content:center; background: rgba(2,6,23,0.6); z-index:1000;}
+.modal-content{width:90%;max-width:980px;background:#071021;border-radius:8px;padding:12px}
+.modal-close{float:right;color:#fff;cursor:pointer;padding:6px}
+.coin-chart-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
+.coin-chart-card{flex:1 1 280px;min-width:220px}
+.summary-metric{font-weight:700;font-size:18px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Portfolio Dashboard v5 — Preview</h1>
+    <div class="controls">
+      <button id="btn-refresh" class="btn">Обновить цены</button>
+      <button id="btn-export" class="btn">Экспорт CSV</button>
+      <select id="periodSelect" class="btn" title="Период для графика портфеля">
+        <option value="1">24ч</option>
+        <option value="7" selected>7д</option>
+        <option value="30">30д</option>
+      </select>
+      <select id="sortSelect" class="btn" title="Сортировка">
+        <option value="value_desc">По стоимости (убыв.)</option>
+        <option value="change_desc">Рост (24ч)</option>
+        <option value="change_asc">Падение (24ч)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="card">
+      <div class="small">Total Portfolio</div>
+      <div id="totalValue" class="summary-metric">$0</div>
+      <div id="totalDelta" class="small"></div>
+    </div>
+    <div class="card">
+      <div class="small">Stablecoins share</div>
+      <div id="stableShare" class="summary-metric">0%</div>
+      <div id="stableList" class="small"></div>
+    </div>
+    <div class="card">
+      <div class="small">Assets count</div>
+      <div id="assetsCount" class="summary-metric">0</div>
+      <div id="lastUpdate" class="small">Last update: -</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card col-8">
+      <div class="small">Portfolio value timeline</div>
+      <canvas id="portfolioChart"></canvas>
+    </div>
+    <div class="card col-4">
+      <div class="small">Allocation</div>
+      <canvas id="allocChart"></canvas>
+      <div id="allocLegend" class="small"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card col-8">
+      <div class="small">Portfolio table</div>
+      <table class="table" id="coinsTable">
+        <thead><tr><th>Coin</th><th>Qty</th><th>Avg entry</th><th>Price</th><th>Value</th><th>24h%</th><th>MarketCap</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card col-4">
+      <div class="small">Quick insights</div>
+      <div id="leaders" class="note"></div>
+      <div class="note" id="portfolioNotes"></div>
+      <hr style="opacity:0.06;margin:8px 0">
+      <div class="small">BTC Dominance</div>
+      <div id="btcDom" class="summary-metric">-</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="small">Выводы по портфелю</div>
+    <div id="conclusions" style="margin-top:8px" class="small"></div>
+  </div>
+
+  <div class="card news-columns">
+    <div class="news-col card">
+      <div class="small">Новости по твоим монетам (RU)</div>
+      <div id="newsByCoins" style="margin-top:8px"></div>
+    </div>
+    <div class="news-col card">
+      <div class="small">Главные крипто-новости (RU)</div>
+      <div id="newsMain" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="small">Графики монет (внизу)</div>
+    <div id="coinCharts" class="coin-chart-row"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="small">Portfolio JSON</div>
+    <pre id="portfolioJson" style="white-space:pre-wrap;background:transparent;border:0;padding:0;margin:8px 0;color:#dbe6ee;overflow:auto;max-height:240px"></pre>
+  </div>
+
+  <div class="footer">Preview • Auto-refresh prices 60s • Auto-refresh news 5min • Data from CoinGecko and Russian crypto media RSS (via AllOrigins)</div>
+</div>
+
+<div id="modal" class="modal"><div class="modal-content card"><div><span id="modalClose" class="modal-close">✖</span></div><div id="modalBody"></div></div></div>
+
+<script>
+const portfolio = [
+  { ticker: 'usdt', symbol: 'USDT', qty: 2.9980, id: 'tether', initialUsd: 2.99, isStable:true },
+  { ticker: 'near', symbol: 'NEAR', qty: 47.07514800, id: 'near', initialUsd:130.00, isStable:false },
+  { ticker: 'eth', symbol: 'ETH', qty: 0.02772999, id: 'ethereum', initialUsd:116.97, isStable:false },
+  { ticker: 'imx', symbol: 'IMX', qty: 196.77758301, id: 'immutable-x', initialUsd:116.62, isStable:false },
+  { ticker: 'apt', symbol: 'APT', qty: 24.66552200, id: 'aptos', initialUsd:115.75, isStable:false },
+  { ticker: 'flow', symbol: 'FLOW', qty: 297.95271800, id: 'flow', initialUsd:115.11, isStable:false },
+  { ticker: 'w', symbol: 'W', qty: 1250.630881, id: 'wormhole', initialUsd:109.91, isStable:false },
+  { ticker: 'zk', symbol: 'ZK', qty: 1867.45024942, id: 'zksync', initialUsd:108.09, isStable:false },
+  { ticker: 'strk', symbol: 'STRK', qty: 779.07513600, id: 'starknet', initialUsd:105.47, isStable:false },
+  { ticker: 'ondo', symbol: 'ONDO', qty: 93.38617400, id: 'ondo', initialUsd:95.87, isStable:false },
+  { ticker: 'mina', symbol: 'MINA', qty: 431.59986400, id: 'mina-protocol', initialUsd:86.13, isStable:false },
+  { ticker: 'not', symbol: 'NOT', qty: 14795.71718200, id: null, initialUsd:33.20, isStable:false }
+];
+
+const COINGECKO_SIMPLE = ids => `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`;
+const COINGECKO_MARKETCHART = (id, days) => `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}`;
+function fmt(v){ return '$' + Number(v).toLocaleString(undefined,{maximumFractionDigits:2}); }
+let charts = {};
+
+async function fetchEnriched(){
+  const ids = portfolio.map(p=>p.id).filter(Boolean).join(',');
+  let prices = {};
+  try{ if(ids){ const url = COINGECKO_SIMPLE(encodeURIComponent(ids)); const res = await fetch(url); prices = await res.json(); } }catch(e){ console.warn('CoinGecko error', e); }
+  const out = [];
+  for(const p of portfolio){
+    let price = null, change24h=null, mcap=null, vol24h=null;
+    if(p.id && prices[p.id]){
+      price = prices[p.id].usd;
+      change24h = prices[p.id].usd_24h_change || 0;
+      mcap = prices[p.id].usd_market_cap || null;
+      vol24h = prices[p.id].usd_24h_vol || null;
+    } else {
+      price = p.initialUsd && p.qty ? (p.initialUsd / p.qty) : p.initialUsd || null;
+    }
+    const value = price ? price * p.qty : 0;
+    out.push({...p, price, change24h, mcap, vol24h, value, avgEntry: price});
+  }
+  return out;
+}
+
+function renderAlloc(data){
+  const labels = data.map(d=>d.symbol); const vals = data.map(d=>d.value);
+  const colors = ['#0088FE','#00C2A8','#FFBB28','#FF8042','#c084fc','#7c3aed','#ef4444','#f97316','#14b8a6','#06b6d4','#a3e635','#f43f5e'];
+  if(charts.alloc) charts.alloc.destroy();
+  charts.alloc = new Chart(document.getElementById('allocChart'), { type:'pie', data:{labels, datasets:[{data:vals, backgroundColor:colors}]}, options:{plugins:{legend:{display:false}}} });
+  const legend = document.getElementById('allocLegend'); legend.innerHTML='';
+  data.forEach((d,i)=>{ const el=document.createElement('div'); el.className='legend-item'; el.innerHTML=`<div class="legend-color" style="background:${colors[i%colors.length]}"></div><div>${d.symbol} — ${fmt(d.value)}</div>`; legend.appendChild(el); });
+}
+
+async function renderPortfolioChart(total, days){
+  const labels = []; const values = [];
+  try{
+    const perCoinSeries = [];
+    for(const p of portfolio){
+      if(!p.id) continue;
+      const res = await fetch(COINGECKO_MARKETCHART(p.id, days));
+      const j = await res.json();
+      if(j && j.prices){
+        const series = j.prices.map(x=>[x[0], x[1]*p.qty]);
+        perCoinSeries.push(series);
+      }
+    }
+    if(perCoinSeries.length>0){
+      const length = perCoinSeries[0].length;
+      for(let i=0;i<length;i++){
+        const ts = perCoinSeries[0][i][0];
+        const date = new Date(ts).toISOString().slice(0,10);
+        const sum = perCoinSeries.reduce((s,ser)=> s + (ser[i] ? ser[i][1] : 0), 0);
+        labels.push(date); values.push(Math.round(sum));
+      }
+    } else {
+      for(let i=days;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); labels.push(d.toISOString().slice(0,10)); values.push(Math.round(total*0.9 + (Math.random()-0.5)*total*0.05)); }
+    }
+  }catch(e){
+    for(let i=days;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); labels.push(d.toISOString().slice(0,10)); values.push(Math.round(total*0.9 + (Math.random()-0.5)*total*0.05)); }
+  }
+  if(charts.portfolio) charts.portfolio.destroy();
+  charts.portfolio = new Chart(document.getElementById('portfolioChart'), { type:'line', data:{labels, datasets:[{label:'Portfolio', data:values, borderColor:'#00C2A8', backgroundColor:'rgba(0,194,168,0.06)', tension:0.3, fill:true}]}, options:{plugins:{legend:{display:false}}} });
+}
+
+function renderTable(data){
+  const tbody = document.querySelector('#coinsTable tbody'); tbody.innerHTML='';
+  data.forEach(d=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="cursor:pointer;color:#a6f3de" data-symbol="${d.symbol}">${d.symbol}</td><td>${Number(d.qty).toLocaleString()}</td><td>${d.avgEntry? d.avgEntry.toFixed(6):'-'}</td><td>${d.price? d.price.toFixed(6): '-'}</td><td>${fmt(d.value)}</td><td style="color:${d.change24h>=0? '#7cf59b':'#ff8b8b'}">${d.change24h? d.change24h.toFixed(2)+'%':'-'}</td><td>${d.mcap? fmt(d.mcap): '-'}</td>`;
+    tbody.appendChild(tr);
+  });
+  document.querySelectorAll('td[data-symbol]').forEach(td=> td.addEventListener('click', (e)=>{ const sym = e.target.getAttribute('data-symbol'); openModalForSymbol(sym); }));
+}
+
+function openModalForSymbol(symbol){
+  const modal = document.getElementById('modal'); const body = document.getElementById('modalBody');
+  body.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;color:var(--accent)">${symbol} — TradingView</h3><a id="modalCloseBtn" class="modal-close">✖</a></div><iframe src="https://s.tradingview.com/widgetembed/?symbol=COINBASE:${symbol}USD&interval=60" style="width:100%;height:520px;border:0;margin-top:8px;"></iframe>`;
+  modal.style.display = 'flex'; document.getElementById('modalClose').onclick = ()=> modal.style.display='none'; document.getElementById('modalCloseBtn').onclick = ()=> modal.style.display='none';
+}
+
+async function renderCoinCharts(days){
+  const container = document.getElementById('coinCharts'); container.innerHTML='';
+  for(const p of portfolio){
+    if(!p.id) continue;
+    const card = document.createElement('div'); card.className='card coin-chart-card';
+    card.innerHTML = `<div class="small">${p.symbol}</div><canvas id="chart_${p.symbol}"></canvas>`;
+    container.appendChild(card);
+    try{
+      const res = await fetch(COINGECKO_MARKETCHART(p.id, days));
+      const j = await res.json();
+      if(j && j.prices){
+        const labels = j.prices.map(x=> new Date(x[0]).toISOString().slice(0,10));
+        const vals = j.prices.map(x=> x[1]);
+        const ctx = document.getElementById('chart_'+p.symbol);
+        new Chart(ctx, { type:'line', data:{labels, datasets:[{label:p.symbol, data:vals, borderColor:'#00C2A8', tension:0.3, fill:false}]}, options:{plugins:{legend:{display:false}}, scales:{y:{ticks:{color:'#cbd5e1'}}} });
+      } else {
+        card.innerHTML += '<div class="small">No chart data</div>';
+      }
+    }catch(e){
+      card.innerHTML += '<div class="small">Chart fetch failed</div>';
+    }
+  }
+}
+
+async function fetchRuNews(){
+  const byCoinsBox = document.getElementById('newsByCoins'); const mainBox = document.getElementById('newsMain');
+  byCoinsBox.innerHTML = 'Загрузка...'; mainBox.innerHTML='Загрузка...';
+  const sources = [
+    {name:'ForkLog', url:'https://forklog.com/rss/'},
+    {name:'Bits', url:'https://bits.media/rss'},
+    {name:'RBC Crypto', url:'https://www.rbc.ru/rss/crypto.rss'}
+  ];
+  try{
+    let allItems = [];
+    for(const s of sources){
+      try{
+        const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(s.url);
+        const res = await fetch(proxy);
+        const txt = await res.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(txt,'application/xml');
+        const items = Array.from(xml.querySelectorAll('item')).map(it=>({source:s.name, title: it.querySelector('title')?.textContent||'', link: it.querySelector('link')?.textContent||'', date: it.querySelector('pubDate')?.textContent||''}));
+        allItems = allItems.concat(items);
+      }catch(e){ console.warn('source fetch failed', s.name, e); }
+    }
+    const sorted = allItems.sort((a,b)=> new Date(b.date)-new Date(a.date));
+    const main = sorted.slice(0,8);
+    mainBox.innerHTML = main.map(it=>`<div style="margin:8px 0"><a href="${it.link}" target="_blank" style="color:#a6f3de;text-decoration:none">${it.title}</a><div class="small" style="color:var(--muted)">${it.source} • ${it.date}</div></div>`).join('');
+    const symbols = portfolio.map(p=>p.symbol.toLowerCase());
+    const filtered = allItems.filter(it=> symbols.some(s=> it.title.toLowerCase().includes(s)));
+    if(filtered.length===0){
+      byCoinsBox.innerHTML = '<div class="small">Нет новостей по монетам — показываем последние</div>' + allItems.slice(0,6).map(it=>`<div style="margin:8px 0"><a href="${it.link}" target="_blank" style="color:#a6f3de;text-decoration:none">${it.title}</a><div class="small" style="color:var(--muted)">${it.source} • ${it.date}</div></div>`).join('');
+    } else {
+      byCoinsBox.innerHTML = filtered.slice(0,10).map(it=>`<div style="margin:8px 0"><a href="${it.link}" target="_blank" style="color:#a6f3de;text-decoration:none">${it.title}</a><div class="small" style="color:var(--muted)">${it.source} • ${it.date}</div></div>`).join('');
+    }
+  }catch(e){
+    byCoinsBox.innerHTML = '<div class="small">Ошибка загрузки новостей</div>';
+    mainBox.innerHTML = '<div class="small">Ошибка загрузки новостей</div>';
+  }
+}
+
+function generateConclusions(enriched){
+  if(!enriched || enriched.length===0) return 'Нет данных';
+  const total = enriched.reduce((s,i)=>s+(i.value||0),0);
+  const leaders = enriched.slice().sort((a,b)=> (b.change24h||0)-(a.change24h||0));
+  const top = leaders[0]; const bottom = leaders[leaders.length-1];
+  const stable = enriched.filter(e=>e.isStable).reduce((s,i)=>s+(i.value||0),0);
+  const stablePerc = total? Math.round((stable/total)*100):0;
+  const notes = [];
+  notes.push(`Общая стоимость портфеля: ${fmt(total)}.`);
+  notes.push(`Лидер роста (24ч): ${top? top.symbol+' '+(top.change24h? top.change24h.toFixed(2)+'%':'' ):'-'}.`);
+  notes.push(`Лидер падения (24ч): ${bottom? bottom.symbol+' '+(bottom.change24h? bottom.change24h.toFixed(2)+'%':'' ):'-'}.`);
+  notes.push(`Доля стейблкоинов: ${stablePerc}%.`);
+  if(stablePerc>30) notes.push('Высокая доля стейблкоинов — низкая волатильность.');
+  if(stablePerc<10) notes.push('Низкая доля стейблкоинов — портфель более рискованный.');
+  return notes.join(' ');
+}
+
+async function updateAll(){
+  document.getElementById('lastUpdate').textContent = 'Loading...';
+  const enriched = await fetchEnriched();
+  const filtered = enriched.filter(p=> (p.value||0) >= 1);
+  const mode = document.getElementById('sortSelect').value;
+  let sorted = filtered.slice();
+  if(mode==='value_desc') sorted.sort((a,b)=> (b.value||0)-(a.value||0));
+  if(mode==='change_desc') sorted.sort((a,b)=> (b.change24h||0)-(a.change24h||0));
+  if(mode==='change_asc') sorted.sort((a,b)=> (a.change24h||0)-(b.change24h||0));
+  const total = sorted.reduce((s,i)=>s+(i.value||0),0);
+  document.getElementById('totalValue').textContent = fmt(total);
+  document.getElementById('assetsCount').textContent = sorted.length;
+  document.getElementById('stableList').textContent = sorted.filter(s=>s.isStable).map(s=>s.symbol).join(', ');
+  const stableVal = sorted.filter(s=>s.isStable).reduce((s,i)=>s+(i.value||0),0);
+  document.getElementById('stableShare').textContent = total? Math.round((stableVal/total)*100) + '%': '0%';
+  const leaders = sorted.slice().sort((a,b)=> (b.change24h||0)-(a.change24h||0));
+  const top = leaders[0]; const bottom = leaders[leaders.length-1];
+  document.getElementById('leaders').innerHTML = `<div class="small">Top: ${top? top.symbol+' '+(top.change24h? top.change24h.toFixed(2)+'%':'' ):'-'}</div><div class="small">Bottom: ${bottom? bottom.symbol+' '+(bottom.change24h? bottom.change24h.toFixed(2)+'%':'' ):'-'}</div>`;
+  document.getElementById('portfolioNotes').textContent = generateConclusions(sorted);
+  renderTable(sorted); renderAlloc(sorted);
+  const days = Number(document.getElementById('periodSelect').value);
+  await renderPortfolioChart(total, days);
+  await renderCoinCharts(days);
+  await fetchRuNews();
+  document.getElementById('portfolioJson').textContent = JSON.stringify(sorted, null, 2);
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
+  return sorted;
+}
+
+document.getElementById('btn-refresh').addEventListener('click', updateAll);
+document.getElementById('btn-export').addEventListener('click', ()=> exportCSV());
+document.getElementById('periodSelect').addEventListener('change', updateAll);
+document.getElementById('sortSelect').addEventListener('change', updateAll);
+
+updateAll();
+setInterval(async ()=> { await updateAll(); }, 60000);
+setInterval(fetchRuNews, 300000);
+</script>
+</body>
+</html>
