@@ -1,0 +1,134 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Инвестиционный Дашборд v2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f7fa; }
+        header { background: #1a202c; color: white; padding: 15px; text-align: center; }
+        .container { padding: 20px; }
+        .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .flex { display: flex; flex-wrap: wrap; gap: 20px; }
+        .flex > div { flex: 1; min-width: 300px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #f0f0f0; }
+        @media (max-width: 768px) { .flex { flex-direction: column; } }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Инвестиционный Дашборд v2</h1>
+</header>
+<div class="container">
+    <div class="card">
+        <h2>Общая стоимость портфеля: <span id="portfolioValue">1 250 000 ₽</span></h2>
+        <p>Изменение за день: <span id="dailyChange">+1.8% (+22 500 ₽)</span></p>
+    </div>
+
+    <div class="flex">
+        <div class="card">
+            <h3>Портфель vs Индекс</h3>
+            <canvas id="portfolioChart"></canvas>
+        </div>
+        <div class="card">
+            <h3>Распределение активов</h3>
+            <canvas id="assetChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Курсы валют (реальное время)</h3>
+        <table id="currencyTable">
+            <tr><th>Валюта</th><th>Курс к рублю</th></tr>
+            <tr><td>USD</td><td id="usdRate">-</td></tr>
+            <tr><td>EUR</td><td id="eurRate">-</td></tr>
+            <tr><td>GBP</td><td id="gbpRate">-</td></tr>
+            <tr><td>JPY</td><td id="jpyRate">-</td></tr>
+            <tr><td>CNY</td><td id="cnyRate">-</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Криптовалюта</h3>
+        <table id="cryptoTable">
+            <tr><th>Монета</th><th>Цена (USD)</th><th>Изменение 24ч</th></tr>
+            <tr><td>BTC</td><td id="btcPrice">-</td><td id="btcChange">-</td></tr>
+            <tr><td>ETH</td><td id="ethPrice">-</td><td id="ethChange">-</td></tr>
+            <tr><td>BNB</td><td id="bnbPrice">-</td><td id="bnbChange">-</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Дивидендный календарь</h3>
+        <table>
+            <tr><th>Компания</th><th>Дата выплаты</th><th>Сумма на акцию</th></tr>
+            <tr><td>Газпром</td><td>15.09.2025</td><td>52 ₽</td></tr>
+            <tr><td>Сбербанк</td><td>10.10.2025</td><td>27 ₽</td></tr>
+            <tr><td>Apple</td><td>05.11.2025</td><td>$0.25</td></tr>
+        </table>
+    </div>
+</div>
+
+<script>
+// График Портфель vs Индекс
+new Chart(document.getElementById('portfolioChart'), {
+    type: 'line',
+    data: {
+        labels: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн'],
+        datasets: [
+            { label: 'Портфель', data: [100, 105, 110, 120, 118, 125], borderColor: 'blue', fill: false },
+            { label: 'Индекс', data: [100, 103, 108, 112, 111, 115], borderColor: 'orange', fill: false }
+        ]
+    }
+});
+
+// Круговая диаграмма распределения активов
+new Chart(document.getElementById('assetChart'), {
+    type: 'pie',
+    data: {
+        labels: ['Акции', 'Облигации', 'Криптовалюта', 'Кэш'],
+        datasets: [{
+            data: [50, 20, 25, 5],
+            backgroundColor: ['#4cafef', '#ff9800', '#9c27b0', '#8bc34a']
+        }]
+    }
+});
+
+// Загрузка курсов валют
+async function loadCurrencyRates() {
+    try {
+        let res = await fetch('https://api.exchangerate.host/latest?base=RUB');
+        let data = await res.json();
+        document.getElementById('usdRate').innerText = (1 / data.rates.USD).toFixed(2);
+        document.getElementById('eurRate').innerText = (1 / data.rates.EUR).toFixed(2);
+        document.getElementById('gbpRate').innerText = (1 / data.rates.GBP).toFixed(2);
+        document.getElementById('jpyRate').innerText = (1 / data.rates.JPY).toFixed(2);
+        document.getElementById('cnyRate').innerText = (1 / data.rates.CNY).toFixed(2);
+    } catch (e) { console.error(e); }
+}
+
+// Загрузка курсов криптовалют
+async function loadCryptoRates() {
+    try {
+        let res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin&vs_currencies=usd&include_24hr_change=true');
+        let data = await res.json();
+        document.getElementById('btcPrice').innerText = data.bitcoin.usd.toFixed(0);
+        document.getElementById('btcChange').innerText = data.bitcoin.usd_24h_change.toFixed(2) + '%';
+        document.getElementById('ethPrice').innerText = data.ethereum.usd.toFixed(0);
+        document.getElementById('ethChange').innerText = data.ethereum.usd_24h_change.toFixed(2) + '%';
+        document.getElementById('bnbPrice').innerText = data.binancecoin.usd.toFixed(0);
+        document.getElementById('bnbChange').innerText = data.binancecoin.usd_24h_change.toFixed(2) + '%';
+    } catch (e) { console.error(e); }
+}
+
+loadCurrencyRates();
+loadCryptoRates();
+setInterval(loadCurrencyRates, 300000);
+setInterval(loadCryptoRates, 300000);
+</script>
+</body>
+</html>
